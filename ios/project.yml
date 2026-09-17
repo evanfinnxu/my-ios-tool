@@ -1,0 +1,60 @@
+# XcodeGen 工程描述 —— 用 `xcodegen generate` 生成 Zaocan.xcodeproj
+# 之所以不直接提交 .xcodeproj：pbxproj 里全是 UUID 引用，手写极易出错且无法在本机验证；
+# 用一份 YAML 描述，交给成熟的生成器产出，可靠性高得多。
+#
+# 依赖：brew install xcodegen
+name: Zaocan
+
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+    CLANG_ENABLE_MODULES: "YES"
+    # 说明：此处刻意不设 ENABLE_BITCODE —— 该构建设置在 Xcode 14 起已被移除，
+    # 写上只会成为无意义的未知设置，不写反而是正确的。
+
+targets:
+  Zaocan:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      # Swift 源码 + Info.plist + Assets
+      - path: Zaocan
+      # 游戏本体。必须用 type: folder 作为「文件夹引用」引入，
+      # 这样 .app 内会保留 www/ 目录层级；若按 group 引入会被拍平，
+      # Bundle.main.url(forResource:subdirectory:"www") 就取不到了。
+      - path: www
+        type: folder
+    settings:
+      base:
+        PRODUCT_NAME: Zaocan
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.xiangkouzaocan
+        INFOPLIST_FILE: Zaocan/Info.plist
+        GENERATE_INFOPLIST_FILE: "NO"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: "NO"
+        # 留空：用 Xcode 直接装机时在这里填你自己的 Team ID；
+        # 用 build-ipa.sh 出未签名 IPA 时该字段不参与签名。
+        DEVELOPMENT_TEAM: ""
+
+# 显式定义 scheme，保证 `xcodebuild -scheme Zaocan` 在没有打开过 Xcode 的机器上也能用
+schemes:
+  Zaocan:
+    build:
+      targets:
+        Zaocan: all
+    run:
+      config: Debug
+    archive:
+      config: Release

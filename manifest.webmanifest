@@ -1,0 +1,35 @@
+{
+  "name": "巷口早餐铺",
+  "short_name": "早餐铺",
+  "description": "原创限时出餐经营游戏。无广告、不联网、存档可改。",
+  "lang": "zh-CN",
+  "start_url": "./index.html",
+  "scope": "./",
+  "id": "xiangkou-zaocan",
+  "display": "standalone",
+  "display_override": ["standalone", "fullscreen"],
+  "orientation": "portrait-primary",
+  "background_color": "#FBF6EC",
+  "theme_color": "#FBF6EC",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    {
+      "src": "icons/icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

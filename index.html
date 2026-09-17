@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>巷口早餐铺 · 单机版</title>
+<meta name="description" content="原创限时出餐经营游戏。无广告、不联网、存档可改。">
+<meta name="theme-color" content="#FBF6EC">
+<meta name="color-scheme" content="light">
+<meta name="format-detection" content="telephone=no,email=no,address=no">
+<!-- iOS 主屏 App（添加到主屏幕后全屏运行，无 Safari 界面） -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="早餐铺">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<style>
+:root{
+  --cream:#FBF6EC; --card:#FFFFFF; --line:#EAE0CC; --line2:#F3ECDD;
+  --ink:#33291D; --ink2:#7A6A55; --ink3:#A79780;
+  --amber:#C8871B; --amber-d:#96610C; --amber-bg:#FDF2DC;
+  --green:#4E7A33; --green-bg:#EDF5E2; --red:#B4453A; --red-bg:#FBEAE7;
+  --blue:#2F6EA5; --blue-bg:#E9F1F8;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{height:100%}
+body{height:100%;margin:0;background:var(--cream);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:15px;line-height:1.6;overflow-x:hidden;
+  -webkit-text-size-adjust:100%;touch-action:manipulation;
+  /* 游戏化交互：禁止长按选中/呼出气泡，但输入框必须放行（存档面板要能编辑 JSON） */
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+  background-image:radial-gradient(circle at 12% 8%,#FDF3E0 0,transparent 42%),radial-gradient(circle at 88% 92%,#F7EEDC 0,transparent 40%)}
+textarea,input,select,.selectable{-webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default!important}
+#app{max-width:940px;margin:0 auto;padding:10px 12px 18px;min-height:100%;display:flex;flex-direction:column;gap:10px}
+.hidden{display:none!important}
+/* 触屏设备：取消粘滞 hover，交互元素加大到可点范围 */
+@media(hover:none){
+  .btn:hover{border-color:var(--line);background:var(--card)}
+  .btn.primary:hover{background:var(--amber);border-color:var(--amber)}
+  .seat.ready:hover{box-shadow:none}
+  .seat.ready:active{border-color:#D8A94F;background:#FFF7E8}
+  .btn:active{background:#F4EEE2}
+  .btn.primary:active{background:var(--amber-d)}
+  #menu .dish:active{border-color:var(--amber);background:#FFFCF3}
+}
+
+/* HUD */
+#hud{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px;
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;box-shadow:0 1px 0 rgba(0,0,0,.02)}
+.stat{display:flex;align-items:baseline;gap:5px;font-variant-numeric:tabular-nums}
+.stat .k{font-size:12px;color:var(--ink3)}
+.stat .v{font-size:18px;font-weight:600;letter-spacing:-.01em}
+#timeBarWrap{flex:1;min-width:120px;height:9px;background:#F1E9DA;border-radius:5px;overflow:hidden}
+#timeBar{height:100%;width:100%;background:linear-gradient(90deg,#E8B44A,#C8871B);border-radius:5px}
+#hud .btn{margin-left:auto}
+
+/* 通用按钮 */
+.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;
+  padding:7px 13px;font-size:14px;font-family:inherit;cursor:pointer;transition:.12s;white-space:nowrap}
+.btn:hover{border-color:#D8C9A8;background:#FFFDF8}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--amber);border-color:var(--amber);color:#fff;font-weight:500}
+.btn.primary:hover{background:var(--amber-d);border-color:var(--amber-d)}
+.btn.ghost{background:transparent}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.sm{padding:5px 10px;font-size:13px}
+
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.panel h3{margin:0 0 8px;font-size:13px;font-weight:500;color:var(--ink3);letter-spacing:.06em}
+
+/* 座位 */
+#seats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.seat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;
+  display:flex;flex-direction:column;gap:8px;min-height:142px;transition:.15s}
+.seat.empty{border-style:dashed;background:#FDFBF5;align-items:center;justify-content:center;color:var(--ink3);font-size:12px}
+.seat.ready{cursor:pointer;border-color:#E0B96A;background:#FFFCF3}
+.seat.ready:hover{box-shadow:0 3px 10px rgba(200,135,27,.13)}
+.seat.leaving{animation:pop .3s ease}
+@keyframes pop{0%{transform:scale(1)}45%{transform:scale(.94)}100%{transform:scale(1)}}
+.cust{display:flex;align-items:center;gap:8px}
+.face{width:30px;height:30px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  font-size:15px;color:#fff;font-weight:500}
+.seat .tag{font-size:11px;padding:1px 7px;border-radius:99px;background:#F4EEE1;color:var(--ink2)}
+.bar{height:7px;background:#F1E9DA;border-radius:4px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--green);border-radius:4px;transition:width .12s linear}
+.bar.warn>i{background:#DFA03A}
+.bar.bad>i{background:var(--red)}
+.order{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:flex;align-items:center;gap:5px;padding:3px 8px 3px 3px;border-radius:9px;
+  background:#F7F2E7;border:1px solid #EEE3CE;font-size:12.5px;color:var(--ink2)}
+.chip.done{background:var(--green-bg);border-color:#D7E7C4;color:#3E6428;text-decoration:line-through}
+.ic{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;
+  font-size:12.5px;font-weight:600;color:#4A3A20;flex:0 0 auto}
+
+/* 出餐口 */
+#tray{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.traySlot{width:56px;height:56px;border-radius:12px;border:1px dashed #DCCFB4;background:#FDFBF5;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;transition:.12s}
+.traySlot.has{border-style:solid;border-color:#E3C98C;background:#FFF9EC}
+.traySlot.has:hover{box-shadow:0 3px 10px rgba(200,135,27,.16);transform:translateY(-1px)}
+.traySlot .nm{font-size:10px;color:var(--ink2)}
+
+/* 灶台 */
+#stations{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.station{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px;min-height:66px;
+  display:flex;flex-direction:column;gap:6px;justify-content:center}
+.station.idle{background:#FDFBF5;border-style:dashed;align-items:center;color:var(--ink3);font-size:12px}
+.station .row{display:flex;align-items:center;gap:7px;font-size:13px}
+.station .bar>i{background:linear-gradient(90deg,#E8B44A,#C8871B)}
+
+/* 菜单 */
+#menu{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.dish{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px 8px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:5px;transition:.12s;font-family:inherit;text-align:center}
+.dish:hover{border-color:#E0B96A;background:#FFFCF3;transform:translateY(-1px)}
+.dish:active{transform:translateY(0)}
+.dish .nm{font-size:12.5px;color:var(--ink);line-height:1.25}
+.dish .meta{font-size:11px;color:var(--ink3);font-variant-numeric:tabular-nums}
+.dish .ic{width:34px;height:34px;border-radius:10px;font-size:16px}
+.dish.blocked{opacity:.55;cursor:default}
+
+/* 弹窗 */
+#overlay{position:fixed;inset:0;background:rgba(48,38,24,.42);display:flex;align-items:center;justify-content:center;
+  padding:16px;z-index:50;backdrop-filter:blur(2px);
+  /* 手机上软键盘弹出时把弹窗整体抬起，否则存档面板的输入框会被键盘盖住 */
+  padding-bottom:calc(16px + var(--kb,0px))}
+#modal{background:var(--card);border-radius:18px;max-width:520px;width:100%;max-height:88vh;overflow:auto;
+  max-height:calc(88vh - var(--kb,0px));
+  padding:22px 24px;box-shadow:0 18px 50px rgba(60,44,20,.22)}
+#modal h2{margin:0 0 6px;font-size:21px;font-weight:600;letter-spacing:-.01em}
+#modal .lead{color:var(--ink2);font-size:14px;margin:0 0 14px}
+#modal .row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line2);font-size:14px}
+#modal .row:last-child{border-bottom:none}
+.stars{font-size:30px;letter-spacing:6px;color:#D8CBAF;margin:4px 0 10px}
+.stars b{color:#E0A32A}
+.shopItem{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line2)}
+.shopItem:last-child{border-bottom:none}
+.shopItem .info{flex:1;min-width:0}
+.shopItem .info .t{font-size:14px}
+.shopItem .info .s{font-size:12px;color:var(--ink3)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+textarea{width:100%;height:112px;font-family:ui-monospace,Consolas,monospace;font-size:12px;
+  border:1px solid var(--line);border-radius:10px;padding:9px;background:#FDFBF5;color:var(--ink);resize:vertical}
+.actions{display:flex;gap:9px;margin-top:16px;flex-wrap:wrap}
+.actions .btn{flex:1;min-width:110px;justify-content:center;text-align:center}
+.hint{font-size:12.5px;color:var(--ink3);margin:10px 0 0}
+kbd{background:#F4EEE1;border:1px solid #E4D9C0;border-bottom-width:2px;border-radius:5px;
+  padding:0 5px;font-size:11.5px;font-family:inherit}
+
+/* 提示 */
+#toasts{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);display:flex;flex-direction:column;
+  gap:7px;align-items:center;z-index:80;pointer-events:none}
+.toast{background:rgba(40,32,20,.9);color:#fff;border-radius:99px;padding:7px 15px;font-size:13px;
+  animation:up .3s ease}
+@keyframes up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ===== 手机 / iPhone：实时游戏必须一屏容纳，禁止页面滚动 =====
+   布局策略：#app 用 grid 固定分区，座位恒为单行 4 列（客人必须全部可见），
+   出餐口与灶台并排省一行，仅「菜单」作为弹性区域内部滚动。
+   这样即使高度不足，让步的是菜单，而不是把座位或灶台切出屏幕。 */
+@media(max-width:700px){
+  body{overflow:hidden}
+  #app{
+    height:100vh;max-height:100vh;            /* 旧版 iOS 回退 */
+    height:100dvh;max-height:100dvh;          /* 支持 dvh 的浏览器：跟随地址栏收缩 */
+    overflow:hidden;
+    display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto auto 1fr;
+    gap:6px;
+    padding:calc(6px + env(safe-area-inset-top)) calc(7px + env(safe-area-inset-right))
+            calc(6px + env(safe-area-inset-bottom)) calc(7px + env(safe-area-inset-left));
+  }
+  #hud{grid-column:1/-1;grid-row:1;padding:7px 10px;gap:7px;border-radius:12px}
+  #seats{grid-column:1/-1;grid-row:2;grid-template-columns:repeat(4,1fr);gap:6px}
+  #app>.panel:nth-child(3){grid-column:1;grid-row:3}   /* 出餐口 */
+  #app>.panel:nth-child(4){grid-column:2;grid-row:3}   /* 灶台 */
+  #app>.panel:nth-child(5){grid-column:1/-1;grid-row:4;min-height:0;display:flex;flex-direction:column} /* 菜单 */
+
+  #hud .stat .v{font-size:15px}
+  #hud .stat .k{font-size:11px}
+  #hud .btn{padding:6px 11px;font-size:13px}
+  #timeBarWrap{min-width:70px;height:8px}
+
+  .panel{padding:7px 9px;border-radius:12px}
+  .panel h3{font-size:11px;margin:0 0 5px}
+
+  .seat{min-height:0;padding:7px 6px;gap:4px;border-radius:11px}
+  .seat.empty{font-size:10px}
+  .cust{gap:5px}
+  .seat .face{width:22px;height:22px;font-size:12px}
+  .seat .tag{font-size:10px;padding:0 5px}
+  .order{gap:3px}
+  .chip{font-size:10px;padding:1px 5px;gap:3px}
+  .chip .ic{width:16px;height:16px!important;border-radius:5px;font-size:10px}
+  .bar{height:5px}
+
+  #tray,#stations{gap:6px}
+  #menu{display:flex;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;
+    gap:6px;padding-bottom:3px;flex:1 1 auto;align-content:flex-start}
+  #menu .dish{flex:0 0 auto;min-width:72px;padding:7px 6px;gap:3px}
+  #menu .dish .nm{font-size:11px}
+  #menu .dish .meta{font-size:10px}
+  #menu .dish .ic{width:26px;height:26px!important;border-radius:8px;font-size:13px}
+
+  #modal{padding:16px 14px;border-radius:16px}
+  #modal h2{font-size:17px}
+  #modal .btn{padding:9px 14px}
+  #overlay{padding:10px;padding-bottom:calc(10px + var(--kb,0px))}
+  /* 注意：必须重置基础样式里的 translateX(-50%)，否则光标居中与左右边距会互相打架 */
+  #toasts{left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));transform:none;align-items:stretch}
+  .toast{text-align:center}
+}
+/* 横屏手机：高度更少，进一步压缩 */
+@media(max-width:900px) and (max-height:460px){
+  #app{grid-template-rows:auto auto auto 1fr;gap:4px}
+  .seat{min-height:0}
+  .panel h3{display:none}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <div class="stat"><span class="k">第</span><span class="v" id="hLevel">1</span><span class="k">关</span></div>
+    <div class="stat"><span class="k">营收</span><span class="v" id="hCoins">0</span></div>
+    <div class="stat"><span class="k">目标</span><span class="v" id="hTarget">0</span></div>
+    <div id="timeBarWrap"><div id="timeBar"></div></div>
+    <div class="stat"><span class="v" id="hTime">0</span><span class="k">秒</span></div>
+    <button class="btn sm ghost" id="btnPause">暂停</button>
+  </header>
+
+  <section id="seats"></section>
+
+  <div class="panel">
+    <h3>出餐口</h3>
+    <div id="tray"></div>
+  </div>
+
+  <div class="panel">
+    <h3>灶台</h3>
+    <div id="stations"></div>
+  </div>
+
+  <div class="panel">
+    <h3>今日菜单（点击开始制作）</h3>
+    <div id="menu"></div>
+  </div>
+</div>
+
+<div id="overlay" class="hidden"><div id="modal"></div></div>
+<div id="toasts"></div>
+
+<script>
+/* ============================================================
+   巷口早餐铺 · 单机版
+   原创内容，无联网、无广告、无登录。
+   存档为明文 JSON，可随时导出/导入/直接修改。
+   ============================================================ */
+
+/* ---------- 1. 静态数据（原创，可任意调） ---------- */
+const DISHES = [
+  {id:'dj', name:'热豆浆',   icon:'浆', price:5,  t:2.0, c:'#EFE3B8', cost:0,   unlockLv:1},
+  {id:'cd', name:'茶叶蛋',   icon:'蛋', price:6,  t:2.6, c:'#D8BB86', cost:0,   unlockLv:1},
+  {id:'yt', name:'脆油条',   icon:'油', price:8,  t:3.2, c:'#E8AE63', cost:0,   unlockLv:1},
+  {id:'xl', name:'小笼包',   icon:'包', price:12, t:4.6, c:'#F1DDC6', cost:180, unlockLv:2},
+  {id:'jb', name:'煎饼果子', icon:'饼', price:14, t:5.2, c:'#EDC873', cost:280, unlockLv:2},
+  {id:'pd', name:'皮蛋瘦肉粥',icon:'粥', price:16, t:5.8, c:'#D9CAA6', cost:420, unlockLv:3},
+  {id:'dn', name:'现磨豆腐脑',icon:'脑', price:20, t:6.4, c:'#E9E3D4', cost:600, unlockLv:4},
+  {id:'xh', name:'蟹黄汤包', icon:'蟹', price:30, t:8.0, c:'#F5CE72', cost:900, unlockLv:5}
+];
+const DISH = {}; DISHES.forEach(d => DISH[d.id] = d);
+
+/* ---------- 调参区：想改难度，只动这里 ----------
+   改完直接刷新页面即可；想验证曲线，运行 test_curve.js。      */
+const BALANCE = {
+  levelDurationBase: 74,   // 首关时长（秒）
+  levelDurationStep: 3,    // 每关增加时长
+  levelDurationCap: 10,    // 时长增长上限（关）
+  spawnGapBase: 6.7,       // 首关顾客到店间隔（秒）
+  spawnGapStep: 0.26,      // 每关缩短
+  spawnGapMin: 2.0,        // 间隔下限：低于这个值就别改了
+  /* 目标营收 = 本关「理论最大营收」× 比例。
+     理论最大营收随出餐节奏与菜单均价自动缩放，所以升级不会把难度冲垮。 */
+  refPriceStart: 6.33,     // 第 1 关参照均价（起手三道菜的均价）
+  refPriceFull: 13.88,     // 参照均价上限（八道菜全解锁的均价）
+  refPriceRamp: 5,         // 参照均价在第几关达到上限（匹配玩家买齐菜单的实际速度）
+  capacityDerate: 1.0,     // 满效率折损系数（1.0 = 以最优操作为天花板）
+  targetRatioBase: 0.68,   // 第 1 关三星线占理论最大营收的比例
+  targetRatioStep: 0.0025, // 每关递增
+  targetRatioMax: 0.76,    // 比例上限：留出约 8~20% 余量给完美操作
+  orderUp2: 3,             // 从第几关起订单可能 2 道菜
+  orderUp3: 6,             // 从第几关起订单可能 3 道菜
+  patienceBase: 10,        // 耐心基础值（秒）
+  patienceMulStart: 1.55,  // 耐心 = 基础 + 订单制作总时长 × 倍率
+  patienceMulStep: 0.04,   // 每关倍率递减（越小越难）
+  patienceMulMin: 0.85,    // 倍率下限
+  patienceMin: 10,         // 耐心绝对下限（秒）
+  star3: 1.00, star2: 0.72, star1: 0.45,   // 星级营收阈值（占目标比例）
+  tipRate: 0.28,           // 小费 = 菜价 × 剩余耐心比例 × 该系数
+  ingredientRate: 0.25,    // 食材成本：结算时按营收比例扣除，防止金币无限膨胀
+  repeatRate: 0.50,        // 重复挑战的营收结算比例（防刷关套利，同时不卡死玩家）
+  speedPerLevel: 0.10,     // 每级速度升级减少的制作时间比例
+  stationCost: [420, 900], // 灶台 2→3、3→4 的价格
+  trayCost: 520,           // 出餐口 3→4 的价格
+  speedCost: [340, 720, 1300] // 速度 Lv1→2、2→3、3→4 的价格
+};
+
+const CUSTOMER_NAMES = ['上班族','学生妹','环卫大叔','遛狗阿姨','快递小哥','买菜奶奶','夜班护士','程序员','送奶工','夫妻档','外卖骑手','早读少年'];
+const FACES = ['#C8871B','#8A9B4E','#B4453A','#2F6EA5','#8A6BA8','#4E7A33','#A5693C','#6B7A8F'];
+
+const STORY = [
+  '第一天开张，灶台上的火苗都透着紧张。',
+  '隔壁写字楼的上班族开始认路了。',
+  '有人在门口拍照，说这家店的油条很脆。',
+  '雨天的客人比平时急，出餐要更快。',
+  '熟客开始点没写在牌子上的东西了。',
+  '有人教你：先把快出锅的端走，别让锅闲下来。',
+  '队伍排到巷口了，托盘得多备几个。',
+  '房东路过看了一眼，什么也没说。',
+  '有个年轻人问，能不能多开一家分店。',
+  '这条巷子的早晨，已经离不开你了。'
+];
+
+/* ---------- 2. 存档 ---------- */
+/* 存储后端：
+   1) 若宿主 App 注入了原生通道（iOS WKWebView 下 localStorage 对 file:// 源
+      不保证跨启动持久化，会丢档），走原生；由 App 存进沙盒。
+   2) 否则走 localStorage（浏览器 / PWA 正常情况）。
+   两条路径对外行为完全一致，接口不变。 */
+const BRIDGE = (function(){
+  try{
+    if(typeof window !== 'undefined' && window.webkit
+       && window.webkit.messageHandlers && window.webkit.messageHandlers.zaocan)
+      return window.webkit.messageHandlers.zaocan;
+  }catch(e){}
+  return null;
+})();
+
+function storageRead(){
+  try{
+    if(BRIDGE) return (typeof window !== 'undefined' && window.__ZAOCAN_SAVE__) || null;
+    return localStorage.getItem(SAVE_KEY);
+  }catch(e){ return null; }
+}
+function storageWrite(text){
+  try{
+    if(BRIDGE){ BRIDGE.postMessage({ cmd:'save', data:text }); return true; }
+    localStorage.setItem(SAVE_KEY, text);
+    return true;
+  }catch(e){ return false; }
+}
+
+const SAVE_KEY = 'xiangkou_zaocan_save_v1';
+const DEFAULT_SAVE = {
+  coins: 0, level: 1, stars: {}, unlocked: ['dj','cd','yt'],
+  stations: 2, trayMax: 3, speedLv: 1, earnedTotal: 0, servedTotal: 0, lostTotal: 0
+};
+let S = load();
+
+function load(){
+  try{
+    const raw = storageRead();
+    if(raw) return Object.assign({}, DEFAULT_SAVE, JSON.parse(raw));
+  }catch(e){ /* 存储不可用，退回内存模式 */ }
+  return JSON.parse(JSON.stringify(DEFAULT_SAVE));
+}
+function save(){
+  storageWrite(JSON.stringify(S));
+}
+function resetSave(){
+  S = JSON.parse(JSON.stringify(DEFAULT_SAVE));
+  save();
+}
+
+/* ---------- 3. 常量与工具 ---------- */
+const SEATS = 4;
+const CENTER = (n) => n;
+const $ = (id) => document.getElementById(id);
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const rnd = (a,b) => a + Math.random()*(b-a);
+const pick = (arr) => arr[Math.floor(Math.random()*arr.length)];
+
+function speedMul(){ return 1 - (S.speedLv-1) * BALANCE.speedPerLevel; }
+function unlockedDishes(){ return DISHES.filter(d => S.unlocked.includes(d.id)); }
+function upgradeCost(){
+  const b = BALANCE;
+  return {
+    station: S.stations >= 4 ? null : b.stationCost[S.stations - 2],
+    tray:    S.trayMax  >= 4 ? null : b.trayCost,
+    speed:   S.speedLv  >= 4 ? null : b.speedCost[S.speedLv - 1]
+  };
+}
+
+/* ---------- 4. 运行时状态 ---------- */
+const R = {
+  running:false, paused:false, over:false,
+  level:1, timeLeft:0, duration:0, target:0,
+  earned:0, served:0, lost:0,
+  seats:[], tray:[], stations:[],
+  spawnTimer:0, spawnGap:6,
+  lastTs:0, seatEls:[], trayEls:[], stationEls:[]
+};
+
+function levelPlan(lv){
+  const b = BALANCE;
+  const duration = b.levelDurationBase + Math.min(lv, b.levelDurationCap) * b.levelDurationStep;
+  const spawnGap = Math.max(b.spawnGapMin, b.spawnGapBase - lv * b.spawnGapStep);
+  let maxItems = 1;
+  if(lv >= b.orderUp3) maxItems = 3;
+  else if(lv >= b.orderUp2) maxItems = 2;
+  return {duration, spawnGap, target: targetFor(lv, duration, spawnGap, maxItems), maxItems};
+}
+
+/* 平均点单道数：n = clamp(1+floor(rand×maxItems×0.75), 1, maxItems) 的期望值 */
+function expectedItems(maxItems){
+  if(maxItems <= 1) return 1;
+  if(maxItems === 2) return 1.25;
+  return 1.667;
+}
+
+/* 参照均价：按关卡进度从「起手三道菜」线性爬到「八道全解锁」。
+   刻意不读玩家实际持有的菜单——否则买贵菜反而抬高自己的目标，等于惩罚升级。 */
+function refPrice(lv){
+  const b = BALANCE;
+  const k = Math.min(1, (lv - 1) / b.refPriceRamp);
+  return b.refPriceStart + (b.refPriceFull - b.refPriceStart) * k;
+}
+
+/* 本关理论最大营收：满效率、满耐心、不断客的情况下的天花板 */
+function capacityOf(lv, duration, spawnGap, maxItems){
+  const b = BALANCE;
+  const customers = duration / spawnGap;                // 到店人数上限
+  const tipBoost  = 1 + b.tipRate * 0.9;                // 满意上菜的小费增益
+  return customers * expectedItems(maxItems) * refPrice(lv) * tipBoost * b.capacityDerate;
+}
+
+function targetFor(lv, duration, spawnGap, maxItems){
+  const b = BALANCE;
+  const ratio = Math.min(b.targetRatioMax, b.targetRatioBase + (lv - 1) * b.targetRatioStep);
+  const cap = capacityOf(lv, duration, spawnGap, maxItems);
+  return Math.round(cap * ratio / 5) * 5;               // 取整到 5，读数干净
+}
+
+/* ---------- 5. 渲染 ---------- */
+function iconHtml(d, big){
+  const cls = big ? 'ic' : 'ic';
+  const st = big ? 'width:34px;height:34px;border-radius:10px;font-size:16px;' : '';
+  return '<span class="'+cls+'" style="background:'+d.c+';'+st+'">'+d.icon+'</span>';
+}
+
+function buildSeats(){
+  const box = $('seats'); box.innerHTML = ''; R.seatEls = [];
+  for(let i=0;i<SEATS;i++){
+    const el = document.createElement('div');
+    el.className = 'seat empty';
+    el.innerHTML = '<span>空位</span>';
+    el.addEventListener('click', () => onSeatClick(i));
+    box.appendChild(el);
+    R.seatEls.push(el);
+  }
+}
+function buildTray(){
+  const box = $('tray'); box.innerHTML = ''; R.trayEls = [];
+  for(let i=0;i<S.trayMax;i++){
+    const el = document.createElement('div');
+    el.className = 'traySlot';
+    el.addEventListener('click', () => onTrayClick(i));
+    box.appendChild(el);
+    R.trayEls.push(el);
+  }
+}
+function buildStations(){
+  const box = $('stations'); box.innerHTML = ''; R.stationEls = [];
+  for(let i=0;i<S.stations;i++){
+    const el = document.createElement('div');
+    el.className = 'station idle';
+    el.innerHTML = '<span>空闲灶位</span>';
+    box.appendChild(el);
+    R.stationEls.push(el);
+  }
+  R.stations = [];
+  for(let i=0;i<S.stations;i++) R.stations.push({busy:false, dish:null, left:0, total:0});
+}
+function buildMenu(){
+  const box = $('menu'); box.innerHTML = '';
+  DISHES.forEach(d => {
+    const ok = S.unlocked.includes(d.id);
+    const el = document.createElement('button');
+    el.className = 'dish' + (ok ? '' : ' blocked');
+    el.dataset.id = d.id;
+    el.innerHTML = iconHtml(d, true)
+      + '<span class="nm">' + d.name + '</span>'
+      + '<span class="meta">' + (ok ? (d.price + ' 元 · ' + d.t.toFixed(1) + 's') : '待解锁') + '</span>';
+    if(ok) el.addEventListener('click', () => cook(d.id));
+    box.appendChild(el);
+  });
+}
+
+function renderSeat(i){
+  const el = R.seatEls[i], c = R.seats[i];
+  if(!c){
+    el.className = 'seat empty';
+    el.innerHTML = '<span>空位</span>';
+    return;
+  }
+  const ratio = c.patience / c.maxPatience;
+  const barCls = ratio > .5 ? '' : (ratio > .25 ? 'warn' : 'bad');
+  const done = remainingOf(c).length === 0;
+  const canServe = R.tray.length > 0 && !done;
+  el.className = 'seat' + (canServe ? ' ready' : '');
+  const left = c.served.slice();
+  let chips = '';
+  c.order.forEach(id => {
+    const d = DISH[id];
+    const k = left.indexOf(id);
+    const isDone = k >= 0;
+    if(isDone) left.splice(k, 1);
+    chips += '<span class="chip' + (isDone ? ' done' : '') + '">' + iconHtml(d) + '<span>' + d.name + '</span></span>';
+  });
+  el.innerHTML =
+    '<div class="cust">'
+      + '<span class="face" style="background:' + c.color + '">' + c.name.slice(0,1) + '</span>'
+      + '<span class="tag">' + c.name + '</span>'
+    + '</div>'
+    + '<div class="order">' + chips + '</div>'
+    + '<div class="bar ' + barCls + '"><i style="width:' + (ratio*100) + '%"></i></div>';
+}
+
+function renderStation(i){
+  const el = R.stationEls[i], s = R.stations[i];
+  if(!s || !s.busy){
+    el.className = 'station idle';
+    el.innerHTML = '<span>空闲灶位</span>';
+    return;
+  }
+  const d = DISH[s.dish];
+  const p = 1 - (s.left / s.total);
+  el.className = 'station';
+  el.innerHTML =
+    '<div class="row">' + iconHtml(d) + '<span>' + d.name + '</span></div>'
+    + '<div class="bar"><i style="width:' + (p*100) + '%"></i></div>';
+}
+
+function renderTray(){
+  R.trayEls.forEach((el, i) => {
+    const id = R.tray[i];
+    if(!id){ el.className = 'traySlot'; el.innerHTML = '<span class="nm" style="opacity:.5">空</span>'; return; }
+    const d = DISH[id];
+    el.className = 'traySlot has';
+    el.innerHTML = iconHtml(d, true) + '<span class="nm">' + d.name + '</span>';
+  });
+}
+
+function renderHud(){
+  $('hLevel').textContent  = R.level;
+  $('hCoins').textContent  = R.earned;
+  $('hTarget').textContent = R.target;
+  $('hTime').textContent   = Math.ceil(Math.max(0, R.timeLeft));
+  $('timeBar').style.width = (clamp(R.timeLeft / R.duration, 0, 1) * 100) + '%';
+}
+
+/* ---------- 6. 游戏流程 ---------- */
+function startLevel(lv){
+  const plan = levelPlan(lv);
+  R.level = lv; R.duration = plan.duration; R.timeLeft = plan.duration;
+  R.target = plan.target; R.spawnGap = plan.spawnGap;
+  R.earned = 0; R.served = 0; R.lost = 0;
+  R.seats = new Array(SEATS).fill(null);
+  R.tray = [];
+  R.stations = [];
+  for(let i=0;i<S.stations;i++) R.stations.push({busy:false, dish:null, left:0, total:0});
+  R.spawnTimer = 0.8; R.over = false; R.paused = false; R.running = true;
+
+  buildSeats(); buildTray(); buildStations(); buildMenu();
+  renderHud(); renderTray();
+  R.stationEls.forEach((_, i) => renderStation(i));
+  R.seatEls.forEach((_, i) => renderSeat(i));
+
+  closeModal();
+  toast('第 ' + lv + ' 关 · 目标营收 ' + plan.target + ' 元');
+  R.lastTs = performance.now();
+  requestAnimationFrame(loop);
+}
+
+function spawnCustomer(){
+  const free = R.seats.findIndex(s => s === null);
+  if(free < 0) return;
+  const pool = unlockedDishes();
+  const plan = levelPlan(R.level);
+  const n = clamp(1 + Math.floor(Math.random() * plan.maxItems * 0.75), 1, plan.maxItems);
+  const order = [];
+  for(let i=0;i<n;i++) order.push(pick(pool).id);
+  const cookSum = order.reduce((a,id) => a + DISH[id].t * speedMul(), 0);
+  const b = BALANCE;
+  const patienceMul = Math.max(b.patienceMulMin, b.patienceMulStart - R.level * b.patienceMulStep);
+  const maxPatience = Math.max(b.patienceMin, b.patienceBase + cookSum * patienceMul);
+  R.seats[free] = {
+    name: pick(CUSTOMER_NAMES), color: pick(FACES),
+    order, served: [], patience: maxPatience, maxPatience
+  };
+  renderSeat(free);
+}
+
+function cook(dishId){
+  if(!R.running || R.over || R.paused) return;
+  const idx = R.stations.findIndex(s => !s.busy);
+  if(idx < 0){ toast('灶台都占着呢'); return; }
+  const d = DISH[dishId];
+  const total = d.t * speedMul();
+  R.stations[idx] = {busy:true, dish:dishId, left:total, total};
+  renderStation(idx);
+}
+
+function finishDish(dishId){
+  if(R.tray.length >= S.trayMax){ toast('出餐口满了，食物凉了…'); return; }
+  R.tray.push(dishId);
+  renderTray();
+}
+
+/* 顾客未上齐的菜（按需扣减已上菜的副本，支持乱序上菜） */
+function remainingOf(c){
+  const left = c.served.slice();
+  const out = [];
+  c.order.forEach(id => {
+    const k = left.indexOf(id);
+    if(k >= 0) left.splice(k, 1); else out.push(id);
+  });
+  return out;
+}
+
+function onSeatClick(i){
+  if(!R.running || R.over || R.paused) return;
+  const c = R.seats[i];
+  if(!c) return;
+  const need = remainingOf(c);
+  if(!need.length){ settleCustomer(i, true); return; }
+  if(!R.tray.length){ toast('先做出餐，再点客人上菜'); return; }
+  const t = R.tray.findIndex(id => need.includes(id));
+  if(t < 0){ toast('这位客人没点这个'); return; }
+  const dishId = R.tray[t];
+  R.tray.splice(t, 1);
+  c.served.push(dishId);
+  renderTray();
+  if(remainingOf(c).length === 0){
+    settleCustomer(i, true);
+  }else{
+    renderSeat(i);
+    toast('已上：' + DISH[dishId].name);
+  }
+}
+
+function settleCustomer(i, happy){
+  const c = R.seats[i];
+  if(!c) return;
+  if(happy){
+    const base = c.order.reduce((a,id) => a + DISH[id].price, 0);
+    const tip = Math.round(base * BALANCE.tipRate * (c.patience / c.maxPatience));
+    R.earned += base + tip; R.served++; S.servedTotal++;
+    toast('+' + (base + tip) + ' 元' + (tip > 0 ? '（小费 ' + tip + '）' : ''));
+  }else{
+    R.lost++; S.lostTotal++;
+    toast(c.name + ' 等太久走了');
+  }
+  R.seats[i] = null;
+  renderSeat(i);
+}
+
+function onTrayClick(i){
+  const id = R.tray[i];
+  if(!id) return;
+  toast('点击客人即可上菜：' + DISH[id].name);
+}
+
+/* ---------- 7. 主循环 ---------- */
+function loop(ts){
+  if(!R.running) return;
+  const dt = Math.min(0.05, (ts - R.lastTs) / 1000);
+  R.lastTs = ts;
+  if(!R.paused && !R.over) step(dt);
+  renderHud();
+  if(R.running) requestAnimationFrame(loop);
+}
+
+function step(dt){
+  R.timeLeft -= dt;
+  if(R.timeLeft <= 0){ R.timeLeft = 0; endLevel(); return; }
+
+  R.spawnTimer -= dt;
+  if(R.spawnTimer <= 0){
+    spawnCustomer();
+    R.spawnTimer = R.spawnGap * rnd(0.82, 1.2);
+  }
+
+  for(let i=0;i<SEATS;i++){
+    const c = R.seats[i];
+    if(!c) continue;
+    c.patience -= dt;
+    if(c.patience <= 0){ settleCustomer(i, false); continue; }
+    renderSeat(i);
+  }
+
+  R.stations.forEach((s, i) => {
+    if(!s.busy) return;
+    s.left -= dt;
+    if(s.left <= 0){
+      const id = s.dish;
+      R.stations[i] = {busy:false, dish:null, left:0, total:0};
+      renderStation(i);
+      finishDish(id);
+    }else{
+      renderStation(i);
+    }
+  });
+}
+
+/* ---------- 8. 结算与商店 ---------- */
+function starsFor(earned, target){
+  const b = BALANCE;
+  if(earned >= target * b.star3) return 3;
+  if(earned >= target * b.star2) return 2;
+  if(earned >= target * b.star1) return 1;
+  return 0;
+}
+
+/* 结算金币。首次通关全额 + 星级奖励；重复挑战只结 repeatRate（老生意）。
+   既堵住「重试本关」无限刷币的漏洞，也避免玩家卡关时彻底没有收入来源。 */
+function awardCoins(lv, earned, st, target){
+  const b = BALANCE;
+  const firstClear = st > 0 && !((S.stars[lv] || 0) > 0);
+  const gross = firstClear ? earned : Math.round(earned * b.repeatRate);
+  const ingredient = Math.round(gross * b.ingredientRate);
+  const bonus = firstClear
+    ? (st >= 3 ? Math.round(target * 0.5) : (st === 2 ? Math.round(target * 0.2) : 0))
+    : 0;
+  return { firstClear, gross, ingredient, bonus, net: Math.max(0, gross - ingredient) + bonus };
+}
+
+function endLevel(){
+  R.over = true; R.running = false;
+  const st = starsFor(R.earned, R.target);
+  const pay = awardCoins(R.level, R.earned, st, R.target);
+  S.coins += pay.net;
+  S.earnedTotal += R.earned;
+  S.stars[R.level] = Math.max(S.stars[R.level] || 0, st);
+  if(st > 0 && S.level === R.level) S.level = R.level + 1;
+  save();
+
+  const starHtml = '<div class="stars">'
+    + [0,1,2].map(k => k < st ? '<b>★</b>' : '★').join('') + '</div>';
+  const verdict = st === 3 ? '满星通关，巷子里的口碑又涨了一点。'
+                : st === 2 ? '顺利收摊，还有提升空间。'
+                : st === 1 ? '勉强达标，明天再快一点。'
+                : '营收没到目标，再试一次吧。';
+  const story = STORY[(R.level - 1) % STORY.length];
+
+  openModal(
+    '<h2>第 ' + R.level + ' 关 · 收摊结算</h2>'
+    + '<p class="lead">' + story + '</p>'
+    + starHtml
+    + '<div class="row"><span>本关营收</span><b>' + R.earned + ' 元</b></div>'
+    + '<div class="row"><span>目标营收</span><span>' + R.target + ' 元</span></div>'
+    + (pay.firstClear ? '' : '<div class="row"><span>重复挑战结算</span><span>' + pay.gross + ' 元（' + Math.round(BALANCE.repeatRate * 100) + '%）</span></div>')
+    + '<div class="row"><span>食材成本</span><span>-' + pay.ingredient + ' 元</span></div>'
+    + '<div class="row"><span>满星奖励</span><span>+' + pay.bonus + ' 元</span></div>'
+    + '<div class="row"><span>满意离店 / 流失</span><span>' + R.served + ' / ' + R.lost + '</span></div>'
+    + '<div class="row"><span>本关入账</span><b>+' + pay.net + ' 元</b></div>'
+    + '<div class="row"><span>当前金币</span><b>' + S.coins + ' 元</b></div>'
+    + '<p class="hint">' + verdict + '</p>'
+    + '<div class="actions">'
+      + (st > 0 ? '<button class="btn primary" id="mNext">继续第 ' + (S.level) + ' 关</button>'
+                : '<button class="btn primary" id="mRetry">重试本关</button>')
+      + '<button class="btn" id="mShop">采买升级</button>'
+      + '<button class="btn ghost" id="mSave">存档</button>'
+    + '</div>', {
+      mNext: () => startLevel(Math.min(S.level, 999)),
+      mRetry: () => startLevel(R.level),
+      mShop: openShop,
+      mSave: openSavePanel
+    });
+}
+
+/* 设备升级：购买后于下一关生效（灶台/出餐口在开局时重建） */
+const ACT = {
+  buyStation: () => {
+    const c = upgradeCost();
+    if(c.station === null || S.coins < c.station) return;
+    S.coins -= c.station; S.stations++; save(); toast('灶台已增至 ' + S.stations + ' 个，下一关生效'); openShop();
+  },
+  buyTray: () => {
+    const c = upgradeCost();
+    if(c.tray === null || S.coins < c.tray) return;
+    S.coins -= c.tray; S.trayMax++; save(); toast('出餐口已增至 ' + S.trayMax + ' 格，下一关生效'); openShop();
+  },
+  buySpeed: () => {
+    const c = upgradeCost();
+    if(c.speed === null || S.coins < c.speed) return;
+    S.coins -= c.speed; S.speedLv++; save(); toast('出餐速度提升至 Lv' + S.speedLv); openShop();
+  }
+};
+
+function openShop(){
+  const c = upgradeCost();
+  const dishes = DISHES.filter(d => !S.unlocked.includes(d.id));
+  let html = '<h2>采买升级</h2><p class="lead">金币 ' + S.coins + ' 元 · 用营收换效率与菜单（设备升级下一关生效）</p>';
+
+  html += '<h3 style="font-size:13px;color:var(--ink3);margin:6px 0 2px">设备</h3>';
+  html += shopRow('灶台数量', S.stations + ' 个' + (c.station ? '（升级 +1）' : '（已满级）'), c.station, 'buyStation');
+  html += shopRow('出餐口容量', S.trayMax + ' 格' + (c.tray ? '（升级 +1）' : '（已满级）'), c.tray, 'buyTray');
+  html += shopRow('出餐速度', 'Lv ' + S.speedLv + '（每级 -10% 制作时间）' + (c.speed ? '' : '（已满级）'), c.speed, 'buySpeed');
+
+  html += '<h3 style="font-size:13px;color:var(--ink3);margin:14px 0 2px">菜单</h3>';
+  if(!dishes.length) html += '<p class="hint">全部菜品已解锁。</p>';
+  dishes.forEach(d => {
+    const locked = S.level < d.unlockLv;
+    const affordable = S.coins >= d.cost;
+    html += '<div class="shopItem">' + iconHtml(d, true)
+      + '<div class="info"><div class="t">' + d.name + ' <span style="color:var(--ink3);font-size:12px">'
+      + d.price + ' 元 / 制作 ' + d.t.toFixed(1) + 's</span></div>'
+      + '<div class="s">' + (locked ? ('需通关第 ' + d.unlockLv + ' 关') : ('解锁价 ' + d.cost + ' 元')) + '</div></div>'
+      + '<button class="btn sm ' + (affordable && !locked ? 'primary' : '') + '" data-buy-dish="' + d.id + '" '
+      + (affordable && !locked ? '' : 'disabled') + '>解锁</button></div>';
+  });
+
+  html += '<div class="actions">'
+    + '<button class="btn" id="shBack">返回结算</button>'
+    + '<button class="btn ghost" id="shSave">存档面板</button>'
+    + '<button class="btn primary" id="shGo">下一关</button></div>';
+
+  openModal(html, {
+    shBack: () => endLevel(),
+    shSave: openSavePanel,
+    shGo: () => startLevel(Math.min(S.level, 999))
+  }, () => {
+    document.querySelectorAll('[data-buy-dish]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const d = DISH[btn.getAttribute('data-buy-dish')];
+        if(!d) return;
+        if(S.coins < d.cost){ toast('金币不够'); return; }
+        S.coins -= d.cost;
+        S.unlocked.push(d.id);
+        save(); toast('已解锁：' + d.name); openShop();
+      });
+    });
+    document.querySelectorAll('[data-act]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const fn = ACT[btn.getAttribute('data-act')];
+        if(fn) fn();
+      });
+    });
+  });
+}
+
+function shopRow(title, sub, price, action){
+  const can = price !== null && S.coins >= price;
+  return '<div class="shopItem"><div class="info"><div class="t">' + title + '</div>'
+    + '<div class="s">' + sub + '</div></div>'
+    + (price === null ? '<span class="tag" style="font-size:12px;color:var(--ink3)">已满级</span>'
+       : '<button class="btn sm ' + (can ? 'primary' : '') + '" data-act="' + action + '" ' + (can ? '' : 'disabled') + '>'
+         + price + ' 元</button>')
+    + '</div>';
+}
+
+function openSavePanel(){
+  const data = JSON.stringify(S, null, 2);
+  openModal(
+    '<h2>存档</h2>'
+    + '<p class="lead">这是你自己的游戏，存档就是明文 JSON —— 想改什么直接改。</p>'
+    + '<textarea id="saveBox" spellcheck="false">' + data.replace(/</g,'&lt;') + '</textarea>'
+    + '<p class="hint">改完点「导入」生效；也可以导出成文件留作备份。浏览器若限制本地存储，可用导出/导入代替自动保存。</p>'
+    + '<div class="grid2" style="margin-top:12px">'
+      + '<button class="btn" id="svExport">导出文件</button>'
+      + '<button class="btn" id="svImport">导入文本</button>'
+      + '<button class="btn" id="svCheat">调试：给 9999 金币</button>'
+      + '<button class="btn" id="svUnlock">调试：解锁全部菜品</button>'
+      + '<button class="btn" id="svMax">调试：设备全满级</button>'
+      + '<button class="btn ghost" id="svReset" style="color:#B4453A">清空存档重来</button>'
+    + '</div>'
+    + '<div class="actions"><button class="btn primary" id="svClose">返回</button></div>',
+    {
+      svExport: () => {
+        const text = JSON.stringify(S, null, 2);
+        /* iOS WKWebView 不支持 blob 下载，交给宿主 App 弹分享面板（并存一份到剪贴板兜底） */
+        if(BRIDGE){
+          try{ BRIDGE.postMessage({ cmd:'export', data:text, name:'xiangkou-zaocan-save.json' }); return; }
+          catch(e){}
+        }
+        try{
+          const blob = new Blob([text], {type:'application/json'});
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'xiangkou-zaocan-save.json';
+          a.click(); URL.revokeObjectURL(a.href);
+          toast('已导出存档');
+        }catch(e){ toast('当前环境不支持导出，请手动复制文本框内容'); }
+      },
+      svImport: () => {
+        try{
+          const t = $('saveBox').value;
+          S = Object.assign({}, DEFAULT_SAVE, JSON.parse(t));
+          save(); toast('导入成功'); openSavePanel();
+        }catch(e){ toast('JSON 格式有问题'); }
+      },
+      svCheat:  () => { S.coins += 9999; save(); toast('金币 +9999'); openSavePanel(); },
+      svUnlock: () => { S.unlocked = DISHES.map(d => d.id); save(); toast('已解锁全部菜品'); openSavePanel(); },
+      svMax:    () => { S.stations = 4; S.trayMax = 4; S.speedLv = 4; save(); toast('设备已满级'); openSavePanel(); },
+      svReset:  () => { resetSave(); toast('存档已清空'); openSavePanel(); },
+      svClose:  () => showStart()
+    });
+}
+
+/* ---------- 9. 开场 / 暂停 / 弹窗 ---------- */
+function showStart(){
+  const totalStars = Object.values(S.stars).reduce((a,b) => a + b, 0);
+  openModal(
+    '<h2>巷口早餐铺</h2>'
+    + '<p class="lead">限时出餐的早餐店经营。灶台有限，客人会等急——先做谁、先端谁，就是全部的策略。</p>'
+    + '<div class="row"><span>当前进度</span><b>第 ' + S.level + ' 关</b></div>'
+    + '<div class="row"><span>金币</span><span>' + S.coins + ' 元</span></div>'
+    + '<div class="row"><span>累计获得星星</span><span>' + totalStars + ' ★</span></div>'
+    + '<div class="row"><span>灶台 / 出餐口 / 速度</span><span>' + S.stations + ' / ' + S.trayMax + ' / Lv' + S.speedLv + '</span></div>'
+    + '<p class="hint">玩法：点菜单开始制作 → 做好自动摆到出餐口 → 点客人上菜。客人的耐心条见底就会走人。'
+    + '<br>快捷键：<kbd>1</kbd>~<kbd>8</kbd> 制作对应菜品，<kbd>空格</kbd> 暂停。</p>'
+    + '<div class="actions">'
+      + '<button class="btn primary" id="stStart">开始第 ' + S.level + ' 关</button>'
+      + '<button class="btn" id="stShop">采买升级</button>'
+      + '<button class="btn ghost" id="stSave">存档</button>'
+    + '</div>', {
+      stStart: () => startLevel(S.level),
+      stShop: openShop,
+      stSave: openSavePanel
+    });
+}
+
+function togglePause(){
+  if(!R.running || R.over) return;
+  R.paused = !R.paused;
+  $('btnPause').textContent = R.paused ? '继续' : '暂停';
+  if(R.paused){
+    openModal('<h2>已暂停</h2><p class="lead">灶火还温着。</p>'
+      + '<div class="actions"><button class="btn primary" id="pzGo">继续营业</button>'
+      + '<button class="btn ghost" id="pzQuit">放弃本关</button></div>',
+      { pzGo: () => { R.paused = false; $('btnPause').textContent = '暂停'; closeModal(); },
+        pzQuit: () => { R.running = false; R.over = true; showStart(); } });
+  }else{
+    closeModal();
+  }
+}
+
+function openModal(html, handlers, after){
+  $('modal').innerHTML = html;
+  $('overlay').classList.remove('hidden');
+  if(handlers){
+    Object.keys(handlers).forEach(id => {
+      const el = $(id);
+      if(el) el.addEventListener('click', handlers[id]);
+    });
+  }
+  if(after) after();
+}
+function closeModal(){ $('overlay').classList.add('hidden'); }
+
+function toast(msg){
+  const box = $('toasts');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(() => el.remove(), 1800);
+}
+
+/* ---------- 10. 输入 ---------- */
+$('btnPause').addEventListener('click', togglePause);
+document.addEventListener('keydown', (e) => {
+  if(e.code === 'Space'){ e.preventDefault(); togglePause(); return; }
+  if(e.key === 'Escape'){ return; }
+  const n = parseInt(e.key, 10);
+  if(n >= 1 && n <= 8){
+    const d = DISHES[n-1];
+    if(d && S.unlocked.includes(d.id)) cook(d.id);
+  }
+});
+
+/* ---------- 11. 移动端适配 ---------- */
+/* 双指缩放会打乱一屏布局，直接禁掉（单指操作不受影响） */
+['gesturestart','gesturechange','gestureend'].forEach(ev =>
+  document.addEventListener(ev, e => e.preventDefault(), { passive:false }));
+
+/* 连点两次不缩放：iOS 对按钮的双击会触发放大 */
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+  const now = Date.now();
+  if(now - lastTouchEnd < 320) e.preventDefault();
+  lastTouchEnd = now;
+}, { passive:false });
+
+/* 长按不弹选择菜单（游戏里长按座位/菜单很常见） */
+document.addEventListener('contextmenu', e => {
+  if(e.target.closest('#app')) e.preventDefault();
+});
+
+/* 软键盘高度 → CSS 变量 --kb。iOS/Android 上 visualViewport 会随键盘收缩，
+   用它算出键盘占用高度，供上面的弹窗与遮罩避让（桌面端 var 恒为 0，不受影响）。 */
+(function trackKeyboard(){
+  if(typeof window === 'undefined' || !window.visualViewport) return;
+  const vv = window.visualViewport;
+  const apply = () => {
+    const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty('--kb', Math.round(kb) + 'px');
+  };
+  vv.addEventListener('resize', apply);
+  vv.addEventListener('scroll', apply);
+  window.addEventListener('orientationchange', () => setTimeout(apply, 120));
+})();
+
+/* 切到后台自动暂停：接电话/切 App 回来时关卡不会被白白耗掉 */
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden && R.running && !R.over && !R.paused) togglePause();
+});
+
+/* ---------- 12. 启动 ---------- */
+(function boot(){
+  buildSeats(); buildTray(); buildStations(); buildMenu();
+  R.level = S.level; R.target = levelPlan(S.level).target; R.duration = 1; R.timeLeft = 0;
+  renderHud();
+  showStart();
+})();
+
+/* 注册离线缓存。file:// 打开、或环境里没有 navigator/window（如无头测试）时
+   会直接跳过——游戏本体不依赖 Service Worker，注册失败不影响任何功能。 */
+(function registerSW(){
+  try{
+    if(typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    if(typeof location === 'undefined' || location.protocol === 'file:') return;
+    if(typeof window === 'undefined') return;
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }catch(e){ /* 忽略：离线缓存属增强项 */ }
+})();
+</script>
+</body>
+</html>
