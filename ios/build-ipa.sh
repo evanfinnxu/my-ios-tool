@@ -27,10 +27,15 @@ PROJ_NAME="Zaocan"
 WWW_DIR="$SCRIPT_DIR/www"
 IPA_NAME="$PROJ_NAME-adhoc.ipa"
 
-say()  { printf '\033[1;33m==>\033[0m %s\n' "$1"; }
-good() { printf '  \033[32m✓\033[0m %s\n' "$1"; }
-warn() { printf '  \033[33m!\033[0m %s\n' "$1"; }
-die()  { printf '\033[31m错误：\033[0m %s\n' "$1" >&2; exit 1; }
+# 有终端才上色。CI 日志不是终端，颜色码会变成 "[32m" 这类噪音，反而不好读。
+C_SAY=''; C_GOOD=''; C_WARN=''; C_BAD=''; C_OFF=''
+if [ -t 1 ]; then
+  C_SAY=$'\033[1;33m'; C_GOOD=$'\033[32m'; C_WARN=$'\033[33m'; C_BAD=$'\033[31m'; C_OFF=$'\033[0m'
+fi
+say()  { printf '%s==>%s %s\n'  "$C_SAY"  "$C_OFF" "$1"; }
+good() { printf '  %s✓%s %s\n'  "$C_GOOD" "$C_OFF" "$1"; }
+warn() { printf '  %s!%s %s\n'  "$C_WARN" "$C_OFF" "$1"; }
+die()  { printf '%s错误：%s %s\n' "$C_BAD" "$C_OFF" "$1" >&2; exit 1; }
 
 # ---------- 0. 环境检查 ----------
 say "检查构建环境"
@@ -101,18 +106,36 @@ printf '%s\n' "$SIGINFO" | grep -qi "Signature=adhoc" \
   || die "签名类型不是 adhoc。实际信息：$(printf '%s' "$SIGINFO" | grep -i 'signature' || echo 未知)"
 good "签名类型：adhoc（无需证书，TrollStore 可直接安装）"
 
-# 校验主二进制确实是 arm64 Mach-O —— 这一步同时在确认「签名没有把二进制写坏」
-TMP_BIN="$(mktemp)"
-if [ -f "$APP_PATH/$PROJ_NAME" ] && cp "$APP_PATH/$PROJ_NAME" "$TMP_BIN"; then
-  MAGIC="$(od -An -tx1 -N4 "$TMP_BIN" | tr -d ' \n')"
-  case "$MAGIC" in
-    cffaedfe) good "主二进制为 arm64 Mach-O（魔数 $MAGIC）" ;;
-    *) die "主二进制魔数异常：${MAGIC:-空}（预期 cffaedfe）—— 产物架构不对，装不上真机" ;;
-  esac
-else
-  die "读不到主二进制：$APP_PATH/$PROJ_NAME"
-fi
-rm -f "$TMP_BIN"
+# ---------- 4b. 校验主二进制架构 ----------
+# 目的：确认产物是 arm64，并且确认签名这一步没把二进制写坏。
+#
+# 【写法说明，别改回去】
+#   下面所有变量都在使用之前先赋值成空串，任何一条命令失败都用 || true 兜住。
+#   原因：脚本开头是 set -euo pipefail（-u = 引用未赋值变量直接报错退出）。
+#   早期版本把变量赋值写在 if 分支里、再到分支外引用，在 macOS 自带的 bash 3.2 上
+#   触发过 "MAGIC: unbound variable" —— 编译和签名其实都成功了，却因为这段校验
+#   把整个构建判成失败。所以这里刻意写成「先初始化、再使用」的死板形式。
+BIN_PATH="$APP_PATH/$PROJ_NAME"
+ARCH=""
+MAGIC=""
+
+[ -f "$BIN_PATH" ] || die "找不到主二进制：$BIN_PATH"
+
+# file 是 macOS 自带命令，直接报架构名，比手抠魔数可读
+ARCH="$(file -b "$BIN_PATH" 2>/dev/null || true)"
+[ -n "$ARCH" ] || ARCH="未知"
+case "$ARCH" in
+  *arm64*) good "主二进制架构正确：$ARCH" ;;
+  *) die "主二进制不是 arm64（file 报：$ARCH）—— 产物架构不对，装不上真机" ;;
+esac
+
+# 再核一次 Mach-O 魔数：arm64（含 arm64e）应为 cffaedfe
+MAGIC="$(od -An -tx1 -N4 "$BIN_PATH" 2>/dev/null | tr -d ' \n' || true)"
+[ -n "$MAGIC" ] || MAGIC="读取失败"
+case "$MAGIC" in
+  cffaedfe) good "Mach-O 魔数正常：$MAGIC" ;;
+  *) die "Mach-O 魔数异常：$MAGIC（预期 cffaedfe）" ;;
+esac
 
 # ---------- 5. 打包成 IPA ----------
 # 注意：签名之后再不动 App 包内任何文件，否则签名会失效，只能重新签。
