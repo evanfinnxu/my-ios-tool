@@ -1,0 +1,143 @@
+# 在云端 macOS runner 上编译并产出「可直接安装的 IPA」（带 ad-hoc 签名）。
+#
+# 用途：没有 Mac 时的替代方案。GitHub 对公开仓库的 macOS runner 免费。
+#
+# 使用：
+#   1. 把这个目录作为仓库根目录推送到 GitHub
+#   2. 进入 Actions 页面，选「构建 iOS IPA」
+#      （推送 .github/workflows/build-ios-ipa.yml 本身会自动触发一次）
+#   3. 跑完后在本次运行的 Artifacts 里下载 Zaocan-ipa
+#   4. 解压得到 Zaocan-adhoc.ipa，TrollStore 可直接安装（ad-hoc 签名，无需证书）
+#
+# 若构建失败：本次运行会额外产出 build-log 这个 artifact，
+# 并自动把关键错误行汇总到运行摘要，直接贴出来即可定位。
+#
+name: 构建 iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths:
+      - 'index.html'
+      - 'icons/**'
+      - 'ios/**'
+      - 'tools/**'
+      - 'README-iOS.md'
+      - '.github/workflows/build-ios-ipa.yml'
+
+jobs:
+  build-ipa:
+    name: macOS 编译
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 确认 Xcode 与 iOS SDK
+        run: |
+          # runner 一般已预置 Xcode，这里只确保选中一个正式版并打印版本，便于日志核对
+          LATEST="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n1 || true)"
+          if [ -n "$LATEST" ]; then sudo xcode-select -s "$LATEST"; fi
+          xcodebuild -version
+          echo "iOS SDK: $(xcrun --sdk iphoneos --show-sdk-version)"
+
+      - name: 安装 xcodegen
+        run: brew install xcodegen
+
+      - name: 生成图标（仓库里若已存在则跳过）
+        run: |
+          if [ ! -f icons/icon-180.png ]; then
+            python3 tools/make_icons.py
+          fi
+
+      - name: 环境自检
+        run: |
+          echo "== 仓库根目录 =="
+          ls -la
+          echo "== ios/ =="
+          ls -la ios
+          echo "== ios/Zaocan/ =="
+          ls -la ios/Zaocan
+          echo "== 游戏本体 =="
+          ls -la index.html sw.js manifest.webmanifest icons
+
+      # tee 到 build.log：xcodebuild 输出很长，失败时靠它定位
+      # 脚本内部会：编译 → 补 ad-hoc 签名 → 打包 IPA → 校验包内容与签名
+      - name: 编译并产出 IPA（含 ad-hoc 签名）
+        run: |
+          set -o pipefail
+          bash ios/build-ipa.sh 2>&1 | tee build.log
+
+      # 失败时把关键错误行汇总到运行摘要，省得翻几万行日志
+      - name: 失败诊断（汇总错误行）
+        if: failure()
+        run: |
+          {
+            echo "## 构建失败"
+            echo
+            echo '### xcodebuild / 脚本报出的 error 行'
+            echo '```'
+            grep -n -i -E "error:|fatal error|错误：|找不到|command not found|No such file" build.log | head -60 || echo "(未匹配到 error 行，见下方日志尾部)"
+            echo '```'
+            echo
+            echo '### 日志尾部 40 行'
+            echo '```'
+            tail -n 40 build.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # 失败时把完整日志作为 artifact 留档，便于贴出来排查
+      - name: 失败时上传完整构建日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: 打包 Web 版（可放到任意静态站点或本地服务器）
+        if: success()
+        run: |
+          rm -rf dist
+          mkdir -p dist/icons
+          cp index.html manifest.webmanifest sw.js dist/
+          cp icons/*.png dist/icons/
+          ( cd dist && zip -qry ../Zaocan-web.zip . )
+
+      - name: 上传 IPA
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Zaocan-ipa
+          path: ios/build/*.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 上传 Web 版
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Zaocan-web
+          path: Zaocan-web.zip
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: 成功摘要
+        if: success()
+        run: |
+          {
+            echo "## 构建成功"
+            echo
+            echo '在下方 **Artifacts** 区下载 `Zaocan-ipa`，解压后即为 `Zaocan-adhoc.ipa`。'
+            echo
+            echo '这个 IPA 已带 ad-hoc 签名，TrollStore 可直接安装，不需要再签一次。'
+            echo
+            echo '### 产物校验结果'
+            echo '```'
+            grep -A 20 "校验 IPA 内容" build.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
